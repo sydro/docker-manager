@@ -10,3 +10,61 @@
   font-weight: 600;
   color: #19a0d7;
 }
+
+.docker-manager-stopped {
+  font-weight: 600;
+  color: #d97a00;
+  margin-left: 4px;
+}
+
+.docker-manager-scroll {
+  max-height: 480px;
+}
+
+.docker-manager-list {
+  spacing: 2px;
+}
+
+.docker-manager-item {
+  padding: 2px 2px;
+}
+
+.docker-manager-empty {
+  padding: 2px 4px;
+}
+
+.docker-section {
+  margin: 2px 0;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.docker-section-running {
+  background-color: #f0f0f0;
+}
+
+.docker-section-stopped {
+  background-color: #e4e4e4;
+}
+
+.docker-section-title {
+  font-weight: 600;
+  padding: 2px 2px 6px 2px;
+}
+
+.docker-row {
+  spacing: 6px;
+  padding: 2px 2px;
+}
+
+.docker-dot-icon {
+  margin-top: 4px;
+}
+
+.docker-dot-running {
+  color: #2bbf5a;
+}
+
+.docker-dot-stopped {
+  color: #e05252;
+}

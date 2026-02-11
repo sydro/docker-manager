@@ -117,11 +117,32 @@ async function requestDocker(path) {
   return { body, statusLine, headers }
 }
 
+function normalizeContainer(c) {
+  const rawName = Array.isArray(c.Names)
+    ? c.Names[0]
+    : typeof c.Names === 'string'
+      ? c.Names
+      : c.Name
+  const name =
+    typeof rawName === 'string'
+      ? rawName.replace(/^\//, '')
+      : c.Id?.slice(0, 12) || 'unknown'
+  return {
+    id: c.Id,
+    name,
+    image: c.Image || '',
+    state: c.State || '',
+    status: c.Status || '',
+  }
+}
+
 export async function listContainers() {
   try {
-    const { body, statusLine, headers } = await requestDocker('/containers/json?all=1')
+    const { body } = await requestDocker('/containers/json?all=1')
     if (!body) return []
-    return JSON.parse(body)
+    const data = JSON.parse(body)
+    if (!Array.isArray(data)) return []
+    return data.map(normalizeContainer)
   } catch (error) {
     logError(error, 'Docker API error')
     return []
@@ -130,5 +151,10 @@ export async function listContainers() {
 
 export async function countRunningContainers() {
   const containers = await listContainers()
-  return containers.filter((c) => c.State === 'running').length
+  return containers.filter(c => c.state === 'running').length
+}
+
+export async function listRunningContainers() {
+  const containers = await listContainers()
+  return containers.filter(c => c.state === 'running')
 }

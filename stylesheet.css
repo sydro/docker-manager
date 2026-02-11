@@ -1,0 +1,12 @@
+.docker-manager-box {
+  spacing: 2px;
+}
+
+.docker-manager-icon {
+  color: #19a0d7;
+}
+
+.docker-manager-count {
+  font-weight: 600;
+  color: #19a0d7;
+}

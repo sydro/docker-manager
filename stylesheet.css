@@ -37,14 +37,16 @@
   margin: 2px 0;
   padding: 6px;
   border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background-color: rgba(255, 255, 255, 0.3);
 }
 
 .docker-section-running {
-  background-color: #f0f0f0;
+  background-color: rgba(46, 191, 90, 0.04);
 }
 
 .docker-section-stopped {
-  background-color: #e4e4e4;
+  background-color: rgba(224, 82, 82, 0.04);
 }
 
 .docker-section-title {
@@ -79,4 +81,33 @@
 
 .docker-action-trash {
   color: #000000;
+}
+
+.docker-actions {
+  spacing: 6px;
+  padding: 2px 2px;
+}
+
+.docker-action-button {
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background-color: rgba(255, 255, 255, 0.6);
+}
+
+.docker-action-button:hover {
+  border-color: rgba(0, 0, 0, 0.4);
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+.docker-action-button:active {
+  background-color: rgba(255, 255, 255, 1);
+}
+
+.docker-action-content {
+  spacing: 6px;
+}
+
+.docker-action-label {
+  font-weight: 600;
 }

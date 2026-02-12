@@ -8,7 +8,13 @@ import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js'
 import * as Main from 'resource:///org/gnome/shell/ui/main.js'
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js'
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js'
-import { listContainers, listRunningContainers } from './functions/docker.js'
+import {
+  deleteContainer,
+  listContainers,
+  listRunningContainers,
+  startContainer,
+  stopContainer,
+} from './functions/docker.js'
 
 const DockerIndicator = GObject.registerClass(
   class DockerIndicator extends PanelMenu.Button {
@@ -16,6 +22,11 @@ const DockerIndicator = GObject.registerClass(
       super._init(0.0, 'Docker Manager')
 
       this._dotIcon = Gio.icon_new_for_string(`${extensionPath}/icons/status-dot-symbolic.svg`)
+      this._icons = {
+        stop: Gio.icon_new_for_string(`${extensionPath}/icons/stop-symbolic.svg`),
+        play: Gio.icon_new_for_string(`${extensionPath}/icons/play-symbolic.svg`),
+        ban: Gio.icon_new_for_string(`${extensionPath}/icons/ban-symbolic.svg`),
+      }
 
       const iconPath = `${extensionPath}/icons/docker-symbolic.svg`
       const gicon = Gio.icon_new_for_string(iconPath)
@@ -59,19 +70,25 @@ const DockerIndicator = GObject.registerClass(
       })
       this.menu.addMenuItem(this._toggle)
       this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem())
-      this._listBox = new St.BoxLayout({
-        vertical: true,
-        style_class: 'docker-manager-list',
-      })
+      this._listSection = new PopupMenu.PopupMenuSection()
       this._scrollView = new St.ScrollView({
         style_class: 'docker-manager-scroll',
         overlay_scrollbars: false,
       })
-      this._scrollView.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC)
-      this._scrollView.set_child(this._listBox)
+      this._scrollView.set_policy(St.PolicyType.NEVER, St.PolicyType.NEVER)
+      this._scrollView.set_child(this._listSection.actor)
       this._listItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false })
       this._listItem.add_child(this._scrollView)
       this.menu.addMenuItem(this._listItem)
+      this.menu.connect('open-state-changed', (_menu, isOpen) => {
+        if (!isOpen) return
+        this._updateScrollPolicy()
+      })
+      this.menu.connect('open-state-changed', (_menu, isOpen) => {
+        if (!isOpen) {
+          this.refresh()
+        }
+      })
     }
 
     async refresh() {
@@ -84,6 +101,7 @@ const DockerIndicator = GObject.registerClass(
           this._stoppedLabel.text = String(stopped.length)
           this._stoppedLabel.visible = true
           this._refreshMenu(containers)
+          this._updateScrollPolicy()
           return
         }
 
@@ -91,14 +109,36 @@ const DockerIndicator = GObject.registerClass(
         this._label.text = String(containers.length)
         this._stoppedLabel.visible = false
         this._refreshMenu(containers)
+        this._updateScrollPolicy()
       } catch (_error) {
         this._label.text = '0'
         this._stoppedLabel.visible = false
       }
     }
 
+    _updateScrollPolicy() {
+      if (!this.menu.isOpen) return
+      GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+        const monitor = Main.layoutManager.primaryMonitor
+        const maxHeight = Math.round(monitor.height * 0.7)
+        const [, naturalHeight] = this._listSection.actor.get_preferred_height(-1)
+        if (naturalHeight > maxHeight) {
+          this._scrollView.style = `max-height: ${maxHeight}px;`
+          this._scrollView.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC)
+        } else {
+          this._scrollView.style = 'max-height: none;'
+          this._scrollView.set_policy(St.PolicyType.NEVER, St.PolicyType.NEVER)
+        }
+        return GLib.SOURCE_REMOVE
+      })
+    }
+
     _refreshMenu(containers) {
-      this._listBox.remove_all_children()
+      if (this._listSection.removeAll) {
+        this._listSection.removeAll()
+      } else {
+        this._listSection.actor.remove_all_children()
+      }
 
       const running = containers.filter(c => c.state === 'running')
       const stopped = containers.filter(c => c.state !== 'running')
@@ -107,51 +147,98 @@ const DockerIndicator = GObject.registerClass(
         this._addSection(`Running (${running.length})`, running, 'docker-section-running')
         this._addSection(`Stopped (${stopped.length})`, stopped, 'docker-section-stopped')
         if (running.length === 0 && stopped.length === 0) {
-          this._listBox.add_child(
-            new St.Label({ text: 'Nessun container', style_class: 'docker-manager-empty' })
-          )
+          const emptyItem = new PopupMenu.PopupMenuItem('Nessun container', {
+            reactive: false,
+            can_focus: false,
+          })
+          emptyItem.add_style_class_name('docker-manager-empty')
+          this._listSection.addMenuItem(emptyItem)
         }
       } else {
         this._addSection(`Running (${running.length})`, running, 'docker-section-running')
         if (running.length === 0) {
-          this._listBox.add_child(
-            new St.Label({ text: 'Nessun container attivo', style_class: 'docker-manager-empty' })
-          )
+          const emptyItem = new PopupMenu.PopupMenuItem('Nessun container attivo', {
+            reactive: false,
+            can_focus: false,
+          })
+          emptyItem.add_style_class_name('docker-manager-empty')
+          this._listSection.addMenuItem(emptyItem)
         }
       }
     }
 
     _addSection(title, items, sectionClass) {
-      const section = new St.BoxLayout({
-        vertical: true,
-        style_class: `docker-section ${sectionClass}`,
-      })
-      const header = new St.Label({
-        text: title,
-        style_class: 'docker-section-title',
-      })
-      section.add_child(header)
+      const section = new PopupMenu.PopupMenuSection()
+      section.actor.add_style_class_name(`docker-section ${sectionClass}`)
+
+      const headerItem = new PopupMenu.PopupMenuItem(title, { reactive: false, can_focus: false })
+      headerItem.add_style_class_name('docker-section-title')
+      section.addMenuItem(headerItem)
 
       for (const c of items) {
-        const row = new St.BoxLayout({ style_class: 'docker-row' })
         const dot = new St.Icon({
           gicon: this._dotIcon,
           icon_size: 12,
           style_class:
-            c.state === 'running'
-              ? 'docker-dot-icon docker-dot-running'
-              : 'docker-dot-icon docker-dot-stopped',
+            c.state === 'running' ? 'docker-dot-icon docker-dot-running' : 'docker-dot-icon docker-dot-stopped',
         })
         const label = new St.Label({
           text: `${c.name} (${c.image})`,
           style_class: 'docker-manager-item',
         })
-        row.add_child(dot)
-        row.add_child(label)
-        section.add_child(row)
-      }
+        const item = new PopupMenu.PopupSubMenuMenuItem('', false)
+        item.label.text = ''
+        item.label.hide()
+        item.insert_child_at_index(dot, 0)
+        item.insert_child_at_index(label, 1)
 
-      this._listBox.add_child(section)
+        const actionsItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false })
+        const actionsBox = new St.BoxLayout({ style_class: 'docker-actions' })
+        if (c.state === 'running') {
+          const stopBox = new St.BoxLayout({ style_class: 'docker-action-content' })
+          stopBox.add_child(new St.Icon({ gicon: this._icons.stop, icon_size: 16 }))
+          stopBox.add_child(new St.Label({ text: 'Stop', style_class: 'docker-action-label' }))
+          const stopButton = new St.Button({
+            style_class: 'docker-action-button docker-action-stop',
+            child: stopBox,
+          })
+          stopButton.connect('clicked', async () => {
+            await stopContainer(c.id)
+            this.refresh()
+          })
+          actionsBox.add_child(stopButton)
+        } else {
+          const startBox = new St.BoxLayout({ style_class: 'docker-action-content' })
+          startBox.add_child(new St.Icon({ gicon: this._icons.play, icon_size: 16 }))
+          startBox.add_child(new St.Label({ text: 'Start', style_class: 'docker-action-label' }))
+          const startButton = new St.Button({
+            style_class: 'docker-action-button docker-action-play',
+            child: startBox,
+          })
+          startButton.connect('clicked', async () => {
+            await startContainer(c.id)
+            this.refresh()
+          })
+          actionsBox.add_child(startButton)
+          const deleteBox = new St.BoxLayout({ style_class: 'docker-action-content' })
+          deleteBox.add_child(new St.Icon({ gicon: this._icons.ban, icon_size: 16 }))
+          deleteBox.add_child(new St.Label({ text: 'Delete', style_class: 'docker-action-label' }))
+          const deleteButton = new St.Button({
+            style_class: 'docker-action-button docker-action-trash',
+            child: deleteBox,
+          })
+          deleteButton.connect('clicked', async () => {
+            await deleteContainer(c.id)
+            this.refresh()
+          })
+          actionsBox.add_child(deleteButton)
+        }
+        actionsItem.add_child(actionsBox)
+        item.menu.addMenuItem(actionsItem)
+
+        section.addMenuItem(item)
+      }
+      this._listSection.addMenuItem(section)
     }
 
     async _getContainers() {
@@ -169,6 +256,9 @@ export default class DockerManagerExtension extends Extension {
     Main.panel.addToStatusArea('docker-manager', this._indicator)
     this._indicator.refresh()
     this._timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
+      if (this._indicator?.menu?.isOpen) {
+        return GLib.SOURCE_CONTINUE
+      }
       this._indicator.refresh()
       return GLib.SOURCE_CONTINUE
     })

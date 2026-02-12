@@ -191,3 +191,14 @@ export async function stopContainer(id) {
     return false
   }
 }
+
+export async function restartContainer(id) {
+  try {
+    if (!id) return false
+    const { statusLine } = await requestDocker(`/containers/${id}/restart`, 'POST')
+    return statusLine?.includes(' 204 ')
+  } catch (error) {
+    logError(error, 'Docker restart error')
+    return false
+  }
+}

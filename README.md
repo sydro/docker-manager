@@ -1,34 +1,36 @@
 # Docker Manager (GNOME Shell Extension)
 
-Estensione per GNOME Shell che sfrutta i comando docker per la gestione dei container docker.
+GNOME Shell extension that uses the Docker API via the Unix socket to manage Docker containers.
 
-## Funzionalità
+## Features
 
-- Nella topbar c'e' l'icona di docker in azzurro con un numero che mostra i container attivi
-- Click sinistro: popup con la lista dei container attivi
-  - Nel popup una spunta mostra anche i container non attivi
-  - Ogni voce della lista individua un container che puo' essere messo avviato, interrotto, riavviato o eliminato
-- Click destro: menu con voce **Settings**.
+- The top bar shows a blue Docker icon with a number indicating running containers
+- Left click: popup with the list of running containers
+  - A toggle in the popup shows stopped containers as well
+  - Each item represents a container that can be started, stopped, restarted, or deleted
+- Right click: menu with a **Settings** entry
 
 ## Screenshot
+![Docker Manager - Popup](screenshots/screenshot1.png)
+![Docker Manager - Show All](screenshots/screenshot2.png)
 
-## Installazione
+## Installation
 
-1. Clona o copia la cartella dell’estensione in:
+1. Clone or copy the extension folder to:
    `~/.local/share/gnome-shell/extensions/docker-manager@sydro.github.com`
-2. Compila lo schema GSettings:
+2. Compile the GSettings schema:
    ```bash
    glib-compile-schemas ~/.local/share/gnome-shell/extensions/docker-manager@sydro.github.com/schemas
    ```
-3. Abilita l’estensione:
+3. Enable the extension:
    ```bash
    gnome-extensions enable docker-manager@sydro.github.com
    ```
-4. Se necessario, riavvia GNOME Shell (Alt+F2, poi `r`) o effettua logout/login (Wayland).
+4. If needed, restart GNOME Shell (Alt+F2, then `r`) or log out/log in (Wayland).
 
-## Sviluppo
+## Development
 
-Se lavori nel repository, puoi usare un symlink verso la directory di GNOME Shell:
+If you’re working in the repository, you can use a symlink to the GNOME Shell directory:
 
 ```bash
 ln -sfn "$(pwd)" ~/.local/share/gnome-shell/extensions/docker-manager@sydro.github.com

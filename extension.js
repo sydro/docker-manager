@@ -80,6 +80,7 @@ const DockerIndicator = GObject.registerClass(
       this._listItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false })
       this._listItem.add_child(this._scrollView)
       this.menu.addMenuItem(this._listItem)
+      this._openSubmenu = null
       this.menu.connect('open-state-changed', (_menu, isOpen) => {
         if (!isOpen) return
         this._updateScrollPolicy()
@@ -235,6 +236,17 @@ const DockerIndicator = GObject.registerClass(
         }
         actionsItem.add_child(actionsBox)
         item.menu.addMenuItem(actionsItem)
+
+        item.menu.connect('open-state-changed', (_menu, isOpen) => {
+          if (isOpen) {
+            if (this._openSubmenu && this._openSubmenu !== item.menu) {
+              this._openSubmenu.close()
+            }
+            this._openSubmenu = item.menu
+          } else if (this._openSubmenu === item.menu) {
+            this._openSubmenu = null
+          }
+        })
 
         section.addMenuItem(item)
       }

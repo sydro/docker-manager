@@ -8,6 +8,7 @@ import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js'
 import * as Main from 'resource:///org/gnome/shell/ui/main.js'
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js'
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js'
+import * as Dialog from 'resource:///org/gnome/shell/ui/dialog.js'
 import {
   deleteContainer,
   listContainers,
@@ -81,6 +82,7 @@ const DockerIndicator = GObject.registerClass(
       this._listItem.add_child(this._scrollView)
       this.menu.addMenuItem(this._listItem)
       this._openSubmenu = null
+      this._confirmDialog = null
       this.menu.connect('open-state-changed', (_menu, isOpen) => {
         if (!isOpen) return
         this._updateScrollPolicy()
@@ -229,8 +231,7 @@ const DockerIndicator = GObject.registerClass(
             child: deleteBox,
           })
           deleteButton.connect('clicked', async () => {
-            await deleteContainer(c.id)
-            this.refresh()
+            this._confirmDelete(c)
           })
           actionsBox.add_child(deleteButton)
         }
@@ -251,6 +252,82 @@ const DockerIndicator = GObject.registerClass(
         section.addMenuItem(item)
       }
       this._listSection.addMenuItem(section)
+    }
+
+    _confirmDelete(container) {
+      if (this._confirmDialog) {
+        if (typeof this._confirmDialog.close === 'function') this._confirmDialog.close()
+        this._confirmDialog.destroy()
+        this._confirmDialog = null
+      }
+
+      if (this.menu.isOpen) this.menu.close()
+
+      const dialog = new Dialog.Dialog(Main.uiGroup, 'docker-confirm-dialog')
+      const messageLayout = new Dialog.MessageDialogContent({
+        title: 'Confirm Delete',
+        description: `Delete container "${container.name}"?`,
+      })
+      dialog.contentLayout.add_child(messageLayout)
+
+      let didSubmit = false
+      dialog.addButton({
+        label: 'No',
+        isDefault: false,
+        action: () => {
+          if (typeof dialog.close === 'function') dialog.close()
+          dialog.destroy()
+        },
+      })
+      dialog.addButton({
+        label: 'Yes',
+        isDefault: true,
+        action: () => {
+          if (didSubmit) return
+          didSubmit = true
+          ;(async () => {
+            try {
+              const ok = await deleteContainer(container.id)
+              if (!ok) {
+                logError(new Error('Docker delete failed'), 'Docker Manager')
+              }
+            } catch (error) {
+              logError(error, 'Docker Manager')
+            } finally {
+              if (typeof dialog.close === 'function') dialog.close()
+              dialog.destroy()
+              this.refresh()
+            }
+          })()
+        },
+      })
+
+      this._confirmDialog = dialog
+
+      const actor = dialog.actor ?? dialog
+      if (actor) {
+        actor.reactive = true
+        actor.can_focus = true
+      }
+
+      GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+        const monitor = Main.layoutManager.primaryMonitor
+        if (!monitor || !actor) return GLib.SOURCE_REMOVE
+        const [minW, natW] = actor.get_preferred_width(-1)
+        const [minH, natH] = actor.get_preferred_height(natW)
+        const w = Math.max(minW, natW)
+        const h = Math.max(minH, natH)
+        const x = Math.floor(monitor.x + (monitor.width - w) / 2)
+        const y = Math.floor(monitor.y + (monitor.height - h) / 2)
+        actor.set_position(Math.max(monitor.x, x), Math.max(monitor.y, y))
+        return GLib.SOURCE_REMOVE
+      })
+
+      if (typeof dialog.open === 'function') {
+        dialog.open()
+      } else if (typeof dialog.show === 'function') {
+        dialog.show()
+      }
     }
 
     async _getContainers() {

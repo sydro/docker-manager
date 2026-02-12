@@ -68,3 +68,15 @@
 .docker-dot-stopped {
   color: #e05252;
 }
+
+.docker-action-stop {
+  color: #e05252;
+}
+
+.docker-action-play {
+  color: #2bbf5a;
+}
+
+.docker-action-trash {
+  color: #000000;
+}

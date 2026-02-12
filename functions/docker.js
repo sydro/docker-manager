@@ -82,13 +82,13 @@ function decodeChunked(body) {
   return out
 }
 
-async function requestDocker(path) {
+async function requestDocker(path, method = 'GET') {
   const conn = await connectUnixSocket(DOCKER_SOCKET_PATH)
   const out = conn.get_output_stream()
   const input = conn.get_input_stream()
 
   const request =
-    `GET ${path} HTTP/1.0\r\n` +
+    `${method} ${path} HTTP/1.0\r\n` +
     'User-Agent: docker-manager\r\n' +
     'Accept: application/json\r\n' +
     'Connection: close\r\n' +
@@ -157,4 +157,37 @@ export async function countRunningContainers() {
 export async function listRunningContainers() {
   const containers = await listContainers()
   return containers.filter(c => c.state === 'running')
+}
+
+export async function startContainer(id) {
+  try {
+    if (!id) return false
+    const { statusLine } = await requestDocker(`/containers/${id}/start`, 'POST')
+    return statusLine?.includes(' 204 ')
+  } catch (error) {
+    logError(error, 'Docker start error')
+    return false
+  }
+}
+
+export async function deleteContainer(id) {
+  try {
+    if (!id) return false
+    const { statusLine } = await requestDocker(`/containers/${id}`, 'DELETE')
+    return statusLine?.includes(' 204 ')
+  } catch (error) {
+    logError(error, 'Docker delete error')
+    return false
+  }
+}
+
+export async function stopContainer(id) {
+  try {
+    if (!id) return false
+    const { statusLine } = await requestDocker(`/containers/${id}/stop`, 'POST')
+    return statusLine?.includes(' 204 ')
+  } catch (error) {
+    logError(error, 'Docker stop error')
+    return false
+  }
 }

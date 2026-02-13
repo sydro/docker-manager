@@ -1,4 +1,5 @@
 import Adw from 'gi://Adw'
+import Gio from 'gi://Gio'
 import Gtk from 'gi://Gtk'
 
 import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js'
@@ -27,6 +28,14 @@ export default class DockerManagerPreferences extends ExtensionPreferences {
     })
 
     group.add(positionRow)
+
+    const showAllRow = new Adw.SwitchRow({
+      title: 'Show all containers',
+      subtitle: 'Include stopped containers in the popup list',
+    })
+    settings.bind('show-all-containers', showAllRow, 'active', Gio.SettingsBindFlags.DEFAULT)
+
+    group.add(showAllRow)
     page.add(group)
     window.add(page)
   }

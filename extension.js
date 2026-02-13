@@ -22,6 +22,7 @@ const DockerIndicator = GObject.registerClass(
     _init(extension) {
       super._init(0.0, 'Docker Manager')
       this._extension = extension
+      this._settings = extension._settings
       const extensionPath = extension.path
 
       this._dotIcon = Gio.icon_new_for_string(`${extensionPath}/icons/status-dot-symbolic.svg`)
@@ -60,17 +61,26 @@ const DockerIndicator = GObject.registerClass(
       box.add_child(stoppedLabel)
       this.add_child(box)
 
-      this._showAll = false
+      this._showAll = this._settings?.get_boolean('show-all-containers') ?? false
       this._toggle = new PopupMenu.PopupSwitchMenuItem('Show all', this._showAll)
       this._toggle.closeOnActivate = false
       this._toggle.connect('toggled', (_item, value) => {
         this._showAll = value
+        if (this._settings) this._settings.set_boolean('show-all-containers', value)
         this.refresh()
         GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
           this.menu.open()
           return GLib.SOURCE_REMOVE
         })
       })
+      if (this._settings) {
+        this._showAllChangedId = this._settings.connect('changed::show-all-containers', () => {
+          const value = this._settings.get_boolean('show-all-containers')
+          this._showAll = value
+          this._toggle.setToggleState(value)
+          this.refresh()
+        })
+      }
       this.menu.addMenuItem(this._toggle)
       this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem())
       this._listSection = new PopupMenu.PopupMenuSection()
@@ -346,6 +356,14 @@ const DockerIndicator = GObject.registerClass(
         return await listContainers()
       }
       return await listRunningContainers()
+    }
+
+    destroy() {
+      if (this._settings && this._showAllChangedId) {
+        this._settings.disconnect(this._showAllChangedId)
+        this._showAllChangedId = null
+      }
+      super.destroy()
     }
   }
 )

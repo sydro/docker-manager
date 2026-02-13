@@ -6,5 +6,10 @@
       <summary>Panel position for Docker icon</summary>
       <description>Controls where the Docker icon is placed in the top bar: left or right.</description>
     </key>
+    <key name="show-all-containers" type="b">
+      <default>false</default>
+      <summary>Show all containers in popup</summary>
+      <description>If enabled, the popup includes both running and stopped containers.</description>
+    </key>
   </schema>
 </schemalist>

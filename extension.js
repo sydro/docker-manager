@@ -19,8 +19,10 @@ import {
 
 const DockerIndicator = GObject.registerClass(
   class DockerIndicator extends PanelMenu.Button {
-    _init(extensionPath) {
+    _init(extension) {
       super._init(0.0, 'Docker Manager')
+      this._extension = extension
+      const extensionPath = extension.path
 
       this._dotIcon = Gio.icon_new_for_string(`${extensionPath}/icons/status-dot-symbolic.svg`)
       this._icons = {
@@ -91,6 +93,15 @@ const DockerIndicator = GObject.registerClass(
         if (!isOpen) {
           this.refresh()
         }
+      })
+
+      this.connect('button-press-event', (_actor, event) => {
+        if (event.get_button() === 3) {
+          this.menu.close()
+          this._extension.openPreferences()
+          return Clutter.EVENT_STOP
+        }
+        return Clutter.EVENT_PROPAGATE
       })
     }
 
@@ -340,10 +351,27 @@ const DockerIndicator = GObject.registerClass(
 )
 
 export default class DockerManagerExtension extends Extension {
-  enable() {
-    this._indicator = new DockerIndicator(this.path)
-    Main.panel.addToStatusArea('docker-manager', this._indicator)
+  _getPanelPosition() {
+    const value = this._settings?.get_string('panel-position')
+    return value === 'left' || value === 'right' ? value : 'right'
+  }
+
+  _recreateIndicator() {
+    if (this._indicator) {
+      this._indicator.destroy()
+      this._indicator = null
+    }
+    this._indicator = new DockerIndicator(this)
+    Main.panel.addToStatusArea('docker-manager', this._indicator, 0, this._getPanelPosition())
     this._indicator.refresh()
+  }
+
+  enable() {
+    this._settings = this.getSettings()
+    this._recreateIndicator()
+    this._settingsChangedId = this._settings.connect('changed::panel-position', () => {
+      this._recreateIndicator()
+    })
     this._timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
       if (this._indicator?.menu?.isOpen) {
         return GLib.SOURCE_CONTINUE
@@ -354,6 +382,11 @@ export default class DockerManagerExtension extends Extension {
   }
 
   disable() {
+    if (this._settings && this._settingsChangedId) {
+      this._settings.disconnect(this._settingsChangedId)
+      this._settingsChangedId = null
+    }
+    this._settings = null
     if (this._timeoutId) {
       GLib.source_remove(this._timeoutId)
       this._timeoutId = null

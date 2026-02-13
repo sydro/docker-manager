@@ -3,6 +3,7 @@
   "name": "Docker Manager",
   "description": "docker-manager is a GNOME Shell extension that allows you to monitor and manage Docker containers directly from the top bar, with quick actions such as start, stop, and restart.",
   "shell-version": ["45", "46", "47"],
+  "settings-schema": "org.gnome.shell.extensions.docker-manager",
   "url": "https://github.com/sydro/docker-manager",
   "version": 1
 }

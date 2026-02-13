@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.docker-manager" path="/org/gnome/shell/extensions/docker-manager/">
+    <key name="panel-position" type="s">
+      <default>'right'</default>
+      <summary>Panel position for Docker icon</summary>
+      <description>Controls where the Docker icon is placed in the top bar: left or right.</description>
+    </key>
+  </schema>
+</schemalist>

@@ -82,6 +82,74 @@ function decodeChunked(body) {
   return out
 }
 
+function runCommand(argv, cwd = null) {
+  return new Promise((resolve, reject) => {
+    try {
+      const launcher = new Gio.SubprocessLauncher({
+        flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
+      })
+      if (cwd) launcher.set_cwd(cwd)
+      const process = launcher.spawnv(argv)
+      process.communicate_utf8_async(null, null, (proc, res) => {
+        try {
+          const [, stdout, stderr] = proc.communicate_utf8_finish(res)
+          resolve({
+            ok: proc.get_successful(),
+            stdout: stdout || '',
+            stderr: stderr || '',
+          })
+        } catch (error) {
+          reject(error)
+        }
+      })
+    } catch (error) {
+      reject(error)
+    }
+  })
+}
+
+function parseComposeFiles(configFiles) {
+  if (typeof configFiles !== 'string' || !configFiles.trim()) return []
+  return configFiles
+    .split(',')
+    .map(path => path.trim())
+    .filter(Boolean)
+}
+
+function buildComposeCommand(composeInfo, actionArgs) {
+  const project = composeInfo?.project || null
+  const configFiles = parseComposeFiles(composeInfo?.configFile)
+  const workingDir = composeInfo?.workingDir || null
+
+  if (!project && configFiles.length === 0) {
+    throw new Error('Compose info missing project and config file')
+  }
+
+  const argv = ['docker', 'compose']
+  if (project) argv.push('--project-name', project)
+  for (const file of configFiles) {
+    argv.push('-f', file)
+  }
+  argv.push(...actionArgs)
+
+  return { argv, workingDir }
+}
+
+async function runComposeAction(composeInfo, actionArgs) {
+  try {
+    const { argv, workingDir } = buildComposeCommand(composeInfo, actionArgs)
+    const result = await runCommand(argv, workingDir)
+    if (!result.ok) {
+      logError(new Error(result.stderr || `Command failed: ${argv.join(' ')}`), 'Docker compose command failed')
+      return false
+    }
+    return true
+  } catch (error) {
+    logError(error, 'Docker compose action error')
+    return false
+  }
+}
+
 async function requestDocker(path, method = 'GET') {
   const conn = await connectUnixSocket(DOCKER_SOCKET_PATH)
   const out = conn.get_output_stream()
@@ -221,4 +289,20 @@ export async function restartContainer(id) {
     logError(error, 'Docker restart error')
     return false
   }
+}
+
+export async function composeProjectUp(composeInfo) {
+  return await runComposeAction(composeInfo, ['up', '-d'])
+}
+
+export async function composeProjectDown(composeInfo) {
+  return await runComposeAction(composeInfo, ['down'])
+}
+
+export async function composeProjectRestart(composeInfo) {
+  return await runComposeAction(composeInfo, ['restart'])
+}
+
+export async function composeProjectDownVolumes(composeInfo) {
+  return await runComposeAction(composeInfo, ['down', '-v'])
 }

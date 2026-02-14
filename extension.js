@@ -10,12 +10,18 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js'
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js'
 import * as Dialog from 'resource:///org/gnome/shell/ui/dialog.js'
 import {
+  composeProjectDown,
+  composeProjectDownVolumes,
+  composeProjectRestart,
+  composeProjectUp,
   deleteContainer,
   listContainers,
   listRunningContainers,
   startContainer,
   stopContainer,
 } from './functions/docker.js'
+
+const OTHER_CONTAINERS_GROUP = 'Other containers'
 
 const DockerIndicator = GObject.registerClass(
   class DockerIndicator extends PanelMenu.Button {
@@ -184,11 +190,10 @@ const DockerIndicator = GObject.registerClass(
     }
 
     _groupContainersByProject(containers) {
-      const NO_PROJECT = 'Other containers'
       const groups = new Map()
 
       for (const c of containers) {
-        const project = c.compose?.project || NO_PROJECT
+        const project = c.compose?.project || OTHER_CONTAINERS_GROUP
         if (!groups.has(project)) {
           groups.set(project, [])
         }
@@ -211,8 +216,8 @@ const DockerIndicator = GObject.registerClass(
           }
         }
 
-        if (a[0] === NO_PROJECT && b[0] !== NO_PROJECT) return 1
-        if (a[0] !== NO_PROJECT && b[0] === NO_PROJECT) return -1
+        if (a[0] === OTHER_CONTAINERS_GROUP && b[0] !== OTHER_CONTAINERS_GROUP) return 1
+        if (a[0] !== OTHER_CONTAINERS_GROUP && b[0] === OTHER_CONTAINERS_GROUP) return -1
         return a[0].localeCompare(b[0])
       })
     }
@@ -227,8 +232,15 @@ const DockerIndicator = GObject.registerClass(
         ? `${projectName} (${runningCount} running, ${stoppedCount} stopped)`
         : `${projectName} (${runningCount})`
 
-      const headerItem = new PopupMenu.PopupMenuItem(title, { reactive: false, can_focus: false })
-      headerItem.add_style_class_name('docker-section-title')
+      let headerItem
+      if (projectName === OTHER_CONTAINERS_GROUP) {
+        headerItem = new PopupMenu.PopupMenuItem(title, { reactive: false, can_focus: false })
+        headerItem.add_style_class_name('docker-section-title')
+      } else {
+        headerItem = new PopupMenu.PopupSubMenuMenuItem(title, false)
+        headerItem.add_style_class_name('docker-section-title')
+        this._addGroupActionsMenu(headerItem, projectName, items)
+      }
       section.addMenuItem(headerItem)
 
       for (const c of items) {
@@ -291,20 +303,88 @@ const DockerIndicator = GObject.registerClass(
         actionsItem.add_child(actionsBox)
         item.menu.addMenuItem(actionsItem)
 
-        item.menu.connect('open-state-changed', (_menu, isOpen) => {
-          if (isOpen) {
-            if (this._openSubmenu && this._openSubmenu !== item.menu) {
-              this._openSubmenu.close()
-            }
-            this._openSubmenu = item.menu
-          } else if (this._openSubmenu === item.menu) {
-            this._openSubmenu = null
-          }
-        })
+        this._trackOpenSubmenu(item.menu)
 
         section.addMenuItem(item)
       }
       this._listSection.addMenuItem(section)
+    }
+
+    _addGroupActionsMenu(headerItem, projectName, items) {
+      const composeInfo = this._getComposeInfoForGroup(projectName, items)
+      const hasRunning = items.some(container => container.state === 'running')
+      const hasStopped = items.some(container => container.state !== 'running')
+
+      const actionsItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false })
+      const actionsBox = new St.BoxLayout({ style_class: 'docker-actions' })
+      const actions = []
+      if (hasStopped) {
+        actions.push({ label: 'UP', run: composeProjectUp, icon: this._icons.play, styleClass: 'docker-action-play' })
+      }
+      if (hasRunning) {
+        actions.push({ label: 'STOP', run: composeProjectDown, icon: this._icons.stop, styleClass: 'docker-action-stop' })
+      }
+      actions.push({
+        label: 'RESTART',
+        run: composeProjectRestart,
+        iconName: 'view-refresh-symbolic',
+        styleClass: 'docker-action-play',
+      })
+      actions.push({
+        label: 'DOWN -v',
+        run: composeProjectDownVolumes,
+        icon: this._icons.ban,
+        styleClass: 'docker-action-trash',
+      })
+
+      for (const action of actions) {
+        const content = new St.BoxLayout({ style_class: 'docker-action-content' })
+        if (action.icon) {
+          content.add_child(new St.Icon({ gicon: action.icon, icon_size: 16 }))
+        } else {
+          content.add_child(new St.Icon({ icon_name: action.iconName, icon_size: 16 }))
+        }
+        content.add_child(new St.Label({ text: action.label, style_class: 'docker-action-label' }))
+
+        const button = new St.Button({
+          style_class: `docker-action-button ${action.styleClass}`,
+          child: content,
+        })
+        button.connect('clicked', async () => {
+          const ok = await action.run(composeInfo)
+          if (!ok) {
+            logError(new Error(`Compose action failed: ${action.label} (${projectName})`), 'Docker Manager')
+          }
+          this.refresh()
+        })
+        actionsBox.add_child(button)
+      }
+
+      actionsItem.add_child(actionsBox)
+      headerItem.menu.addMenuItem(actionsItem)
+      this._trackOpenSubmenu(headerItem.menu)
+    }
+
+    _getComposeInfoForGroup(projectName, items) {
+      const composeContainer = items.find(container => container.compose?.isCompose)
+      return {
+        project: composeContainer?.compose?.project || projectName,
+        configFile: composeContainer?.compose?.configFile || null,
+        workingDir: composeContainer?.compose?.workingDir || null,
+      }
+    }
+
+    _trackOpenSubmenu(menu) {
+      menu.connect('open-state-changed', (_menu, isOpen) => {
+        if (isOpen) {
+          if (this._openSubmenu && this._openSubmenu !== menu) {
+            this._openSubmenu.close()
+          }
+          this._openSubmenu = menu
+        } else if (this._openSubmenu === menu) {
+          this._openSubmenu = null
+        }
+      })
     }
 
     _confirmDelete(container) {

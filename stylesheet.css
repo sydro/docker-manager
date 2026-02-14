@@ -29,6 +29,19 @@
   padding: 2px 4px;
 }
 
+.docker-loading-box {
+  spacing: 6px;
+  padding: 2px 2px;
+}
+
+.docker-loading-icon {
+  color: #19a0d7;
+}
+
+.docker-loading-label {
+  font-weight: 600;
+}
+
 .docker-section {
   margin: 2px 0;
   padding: 6px;
@@ -85,6 +98,10 @@
 
 .docker-action-button:active {
   background-color: rgba(255, 255, 255, 1);
+}
+
+.docker-action-button-disabled {
+  opacity: 0.6;
 }
 
 .docker-action-content {

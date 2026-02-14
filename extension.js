@@ -10,7 +10,6 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js'
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js'
 import * as Dialog from 'resource:///org/gnome/shell/ui/dialog.js'
 import {
-  composeProjectDown,
   composeProjectDownVolumes,
   composeProjectRestart,
   composeProjectUp,
@@ -89,6 +88,24 @@ const DockerIndicator = GObject.registerClass(
       }
       this.menu.addMenuItem(this._toggle)
       this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem())
+      this._pendingActions = 0
+      this._actionButtons = new Set()
+      this._loadingItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false })
+      this._loadingItem.visible = false
+      const loadingBox = new St.BoxLayout({ style_class: 'docker-loading-box' })
+      this._loadingIcon = new St.Icon({
+        icon_name: 'process-working-symbolic',
+        icon_size: 16,
+        style_class: 'docker-loading-icon',
+      })
+      this._loadingLabel = new St.Label({
+        text: 'Loading...',
+        style_class: 'docker-loading-label',
+      })
+      loadingBox.add_child(this._loadingIcon)
+      loadingBox.add_child(this._loadingLabel)
+      this._loadingItem.add_child(loadingBox)
+      this.menu.addMenuItem(this._loadingItem)
       this._listSection = new PopupMenu.PopupMenuSection()
       this._scrollView = new St.ScrollView({
         style_class: 'docker-manager-scroll',
@@ -164,6 +181,7 @@ const DockerIndicator = GObject.registerClass(
     }
 
     _refreshMenu(containers) {
+      this._actionButtons.clear()
       if (this._listSection.removeAll) {
         this._listSection.removeAll()
       } else {
@@ -270,9 +288,9 @@ const DockerIndicator = GObject.registerClass(
             style_class: 'docker-action-button docker-action-stop',
             child: stopBox,
           })
+          this._registerActionButton(stopButton)
           stopButton.connect('clicked', async () => {
-            await stopContainer(c.id)
-            this.refresh()
+            await this._runAction(stopButton, async () => await stopContainer(c.id))
           })
           actionsBox.add_child(stopButton)
         } else {
@@ -283,9 +301,9 @@ const DockerIndicator = GObject.registerClass(
             style_class: 'docker-action-button docker-action-play',
             child: startBox,
           })
+          this._registerActionButton(startButton)
           startButton.connect('clicked', async () => {
-            await startContainer(c.id)
-            this.refresh()
+            await this._runAction(startButton, async () => await startContainer(c.id))
           })
           actionsBox.add_child(startButton)
           const deleteBox = new St.BoxLayout({ style_class: 'docker-action-content' })
@@ -295,7 +313,9 @@ const DockerIndicator = GObject.registerClass(
             style_class: 'docker-action-button docker-action-trash',
             child: deleteBox,
           })
+          this._registerActionButton(deleteButton)
           deleteButton.connect('clicked', async () => {
+            this._flashButton(deleteButton)
             this._confirmDelete(c)
           })
           actionsBox.add_child(deleteButton)
@@ -322,7 +342,12 @@ const DockerIndicator = GObject.registerClass(
         actions.push({ label: 'UP', run: composeProjectUp, icon: this._icons.play, styleClass: 'docker-action-play' })
       }
       if (hasRunning) {
-        actions.push({ label: 'STOP', run: composeProjectDown, icon: this._icons.stop, styleClass: 'docker-action-stop' })
+        actions.push({
+          label: 'STOP',
+          run: async () => await this._stopGroupContainers(items),
+          icon: this._icons.stop,
+          styleClass: 'docker-action-stop',
+        })
       }
       actions.push({
         label: 'RESTART',
@@ -350,12 +375,9 @@ const DockerIndicator = GObject.registerClass(
           style_class: `docker-action-button ${action.styleClass}`,
           child: content,
         })
+        this._registerActionButton(button)
         button.connect('clicked', async () => {
-          const ok = await action.run(composeInfo)
-          if (!ok) {
-            logError(new Error(`Compose action failed: ${action.label} (${projectName})`), 'Docker Manager')
-          }
-          this.refresh()
+          await this._runAction(button, async () => await action.run(composeInfo), action.label, projectName)
         })
         actionsBox.add_child(button)
       }
@@ -363,6 +385,66 @@ const DockerIndicator = GObject.registerClass(
       actionsItem.add_child(actionsBox)
       headerItem.menu.addMenuItem(actionsItem)
       this._trackOpenSubmenu(headerItem.menu)
+    }
+
+    async _stopGroupContainers(items) {
+      const runningContainers = items.filter(container => container.state === 'running')
+      let allOk = true
+      for (const container of runningContainers) {
+        const ok = await stopContainer(container.id)
+        if (!ok) allOk = false
+      }
+      return allOk
+    }
+
+    _registerActionButton(button) {
+      this._actionButtons.add(button)
+      this._applyLoadingStateToButton(button)
+    }
+
+    _applyLoadingStateToButton(button) {
+      const isLoading = this._pendingActions > 0
+      button.reactive = !isLoading
+      button.can_focus = !isLoading
+      if (isLoading) {
+        button.add_style_class_name('docker-action-button-disabled')
+      } else {
+        button.remove_style_class_name('docker-action-button-disabled')
+      }
+    }
+
+    _syncLoadingUi() {
+      const isLoading = this._pendingActions > 0
+      this._loadingItem.visible = isLoading
+      for (const button of this._actionButtons) {
+        this._applyLoadingStateToButton(button)
+      }
+    }
+
+    _flashButton(button) {
+      button.add_style_pseudo_class('active')
+      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 120, () => {
+        button.remove_style_pseudo_class('active')
+        return GLib.SOURCE_REMOVE
+      })
+    }
+
+    async _runAction(button, action, actionLabel = null, projectName = null) {
+      this._flashButton(button)
+      if (this._pendingActions > 0) return false
+      this._pendingActions += 1
+      this._syncLoadingUi()
+      try {
+        const ok = await action()
+        if (!ok && actionLabel && projectName) {
+          logError(new Error(`Compose action failed: ${actionLabel} (${projectName})`), 'Docker Manager')
+        }
+        return ok
+      } finally {
+        this._pendingActions = Math.max(0, this._pendingActions - 1)
+        this._syncLoadingUi()
+        this.refresh()
+      }
     }
 
     _getComposeInfoForGroup(projectName, items) {

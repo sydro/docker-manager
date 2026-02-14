@@ -299,6 +299,10 @@ export async function composeProjectDown(composeInfo) {
   return await runComposeAction(composeInfo, ['down'])
 }
 
+export async function composeProjectStop(composeInfo) {
+  return await runComposeAction(composeInfo, ['stop'])
+}
+
 export async function composeProjectRestart(composeInfo) {
   return await runComposeAction(composeInfo, ['restart'])
 }

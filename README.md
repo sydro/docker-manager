@@ -13,6 +13,7 @@ GNOME Shell extension that uses the Docker API via the Unix socket to manage Doc
 ## Screenshot
 ![Docker Manager - Popup](screenshots/screenshot1.png)
 ![Docker Manager - Show All](screenshots/screenshot2.png)
+![Docker Manager - Group Actions](screenshots/screenshot3.png)
 
 ## Installation
 

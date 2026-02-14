@@ -21,10 +21,6 @@
   max-height: 480px;
 }
 
-.docker-manager-list {
-  spacing: 2px;
-}
-
 .docker-manager-item {
   padding: 2px 2px;
 }
@@ -41,22 +37,9 @@
   background-color: rgba(255, 255, 255, 0.3);
 }
 
-.docker-section-running {
-  background-color: rgba(46, 191, 90, 0.04);
-}
-
-.docker-section-stopped {
-  background-color: rgba(224, 82, 82, 0.04);
-}
-
 .docker-section-title {
   font-weight: 600;
   padding: 2px 2px 6px 2px;
-}
-
-.docker-row {
-  spacing: 6px;
-  padding: 2px 2px;
 }
 
 .docker-dot-icon {

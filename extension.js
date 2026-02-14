@@ -164,36 +164,68 @@ const DockerIndicator = GObject.registerClass(
         this._listSection.actor.remove_all_children()
       }
 
-      const running = containers.filter(c => c.state === 'running')
-      const stopped = containers.filter(c => c.state !== 'running')
+      if (containers.length === 0) {
+        const emptyItem = new PopupMenu.PopupMenuItem(
+          this._showAll ? 'Nessun container' : 'Nessun container attivo',
+          {
+            reactive: false,
+            can_focus: false,
+          }
+        )
+        emptyItem.add_style_class_name('docker-manager-empty')
+        this._listSection.addMenuItem(emptyItem)
+        return
+      }
 
-      if (this._showAll) {
-        this._addSection(`Running (${running.length})`, running, 'docker-section-running')
-        this._addSection(`Stopped (${stopped.length})`, stopped, 'docker-section-stopped')
-        if (running.length === 0 && stopped.length === 0) {
-          const emptyItem = new PopupMenu.PopupMenuItem('Nessun container', {
-            reactive: false,
-            can_focus: false,
-          })
-          emptyItem.add_style_class_name('docker-manager-empty')
-          this._listSection.addMenuItem(emptyItem)
-        }
-      } else {
-        this._addSection(`Running (${running.length})`, running, 'docker-section-running')
-        if (running.length === 0) {
-          const emptyItem = new PopupMenu.PopupMenuItem('Nessun container attivo', {
-            reactive: false,
-            can_focus: false,
-          })
-          emptyItem.add_style_class_name('docker-manager-empty')
-          this._listSection.addMenuItem(emptyItem)
-        }
+      const grouped = this._groupContainersByProject(containers)
+      for (const [projectName, items] of grouped) {
+        this._addSection(projectName, items)
       }
     }
 
-    _addSection(title, items, sectionClass) {
+    _groupContainersByProject(containers) {
+      const NO_PROJECT = 'Other containers'
+      const groups = new Map()
+
+      for (const c of containers) {
+        const project = c.compose?.project || NO_PROJECT
+        if (!groups.has(project)) {
+          groups.set(project, [])
+        }
+        groups.get(project).push(c)
+      }
+
+      for (const items of groups.values()) {
+        items.sort((a, b) => {
+          if (a.state !== b.state) return a.state === 'running' ? -1 : 1
+          return a.name.localeCompare(b.name)
+        })
+      }
+
+      return [...groups.entries()].sort((a, b) => {
+        if (this._showAll) {
+          const aHasRunning = a[1].some(container => container.state === 'running')
+          const bHasRunning = b[1].some(container => container.state === 'running')
+          if (aHasRunning !== bHasRunning) {
+            return aHasRunning ? -1 : 1
+          }
+        }
+
+        if (a[0] === NO_PROJECT && b[0] !== NO_PROJECT) return 1
+        if (a[0] !== NO_PROJECT && b[0] === NO_PROJECT) return -1
+        return a[0].localeCompare(b[0])
+      })
+    }
+
+    _addSection(projectName, items) {
       const section = new PopupMenu.PopupMenuSection()
-      section.actor.add_style_class_name(`docker-section ${sectionClass}`)
+      section.actor.add_style_class_name('docker-section')
+
+      const runningCount = items.filter(c => c.state === 'running').length
+      const stoppedCount = items.length - runningCount
+      const title = this._showAll
+        ? `${projectName} (${runningCount} running, ${stoppedCount} stopped)`
+        : `${projectName} (${runningCount})`
 
       const headerItem = new PopupMenu.PopupMenuItem(title, { reactive: false, can_focus: false })
       headerItem.add_style_class_name('docker-section-title')

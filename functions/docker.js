@@ -127,12 +127,32 @@ function normalizeContainer(c) {
     typeof rawName === 'string'
       ? rawName.replace(/^\//, '')
       : c.Id?.slice(0, 12) || 'unknown'
+
+  const composeLabels = {}
+  const labels = c.Labels && typeof c.Labels === 'object' ? c.Labels : {}
+  for (const [key, value] of Object.entries(labels)) {
+    if (key.startsWith('com.docker.compose.')) {
+      composeLabels[key] = value
+    }
+  }
+
   return {
     id: c.Id,
     name,
     image: c.Image || '',
     state: c.State || '',
     status: c.Status || '',
+    compose: {
+      project: composeLabels['com.docker.compose.project'] || null,
+      service: composeLabels['com.docker.compose.service'] || null,
+      configFile: composeLabels['com.docker.compose.project.config_files'] || null,
+      workingDir: composeLabels['com.docker.compose.project.working_dir'] || null,
+      version: composeLabels['com.docker.compose.version'] || null,
+      containerNumber: composeLabels['com.docker.compose.container-number'] || null,
+      oneoff: composeLabels['com.docker.compose.oneoff'] || null,
+      isCompose: Object.keys(composeLabels).length > 0,
+      labels: composeLabels,
+    },
   }
 }
 
